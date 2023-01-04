@@ -5,9 +5,9 @@ networks:
     driver: bridge
 
 services:
-  # Monitor host metrics
+  # Node exporter capture host metrics
   nodeexporter:
-    image: prom/node-exporter:v1.3.0
+    image: prom/node-exporter:v1.5.0
     container_name: nodeexporter
     volumes:
       - /proc:/host/proc:ro
@@ -18,18 +18,17 @@ services:
       - '--path.rootfs=/rootfs'
       - '--path.sysfs=/host/sys'
       - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
-    restart: always
+    restart: unless-stopped
     expose:
       - 9100
-    # network_mode: host
     networks:
       - monitor-net
     labels:
       org.label-schema.group: "monitoring"
     
-  # Monitor container metrics
+  # Cadvisor monitor container metrics
   cadvisor:
-    image: gcr.io/cadvisor/cadvisor:v0.45.0
+    image: gcr.io/cadvisor/cadvisor:v0.46.0
     container_name: cadvisor
     privileged: true
     devices:
@@ -38,18 +37,17 @@ services:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
       - /sys:/sys:ro
-      - /var/lib/docker/:/var/lib/docker:ro
-      # - /cgroup:/cgroup:ro
-    restart: always
+      - /var/lib/docker:/var/lib/docker:ro
+      #- /cgroup:/cgroup:ro #doesn't work on MacOS only for Linux
+    restart: unless-stopped
     expose:
       - 8080
-    # network_mode: host
     networks:
       - monitor-net
     labels:
       org.label-schema.group: "monitoring"
 
-  # Retrieve log from hosts and containers
+  # Promtail retrieve log from hosts and containers
   promtail:
     image: grafana/promtail:2.6.0
     container_name: promtail
@@ -72,6 +70,18 @@ services:
       dockerfile: Dockerfile
     container_name: log_agent
     restart: always
+    networks:
+      - monitor-net
+    labels:
+      org.label-schema.group: "monitoring"
+  
+  # Pushgateway
+  pushgateway:
+    image: prom/pushgateway:v1.5.1
+    container_name: pushgateway
+    restart: unless-stopped
+    expose:
+      - 9091
     networks:
       - monitor-net
     labels:

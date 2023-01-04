@@ -2,7 +2,7 @@ version: "3"
 
 networks:
   monitor-net:
-    external: true
+    driver: bridge
 
 volumes:
     prometheus_data: {}
@@ -11,27 +11,27 @@ volumes:
 services:
   # Grafana dashboard server
   grafana:
-    image: grafana/grafana:9.1.1
+    image: grafana/grafana:9.3.2
     container_name: grafana
     volumes:
       - grafana_data:/var/lib/grafana
       - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
       - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
-    env_file:
-      - config
+    environment:
+      - GF_SECURITY_ADMIN_USER=${ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    restart: unless-stopped
     expose:
       - 3000
-    # ports:
-    #   - "3000:3000"
     networks:
       - monitor-net
     labels:
       org.label-schema.group: "monitoring"
-    restart: always 
 
   # Prometheus metrics server
   prometheus:
-    image: prom/prometheus:v2.38.0
+    image: prom/prometheus:v2.41.0
     container_name: prometheus
     volumes:
       - ./prometheus:/etc/prometheus
@@ -43,13 +43,13 @@ services:
       - '--web.console.templates=/etc/prometheus/consoles'
       - '--storage.tsdb.retention.time=200h'
       - '--web.enable-lifecycle'
+    restart: unless-stopped
     expose:
       - 9090
     networks:
       - monitor-net
     labels:
       org.label-schema.group: "monitoring"
-    restart: always
 
   # Loki logging server
   loki:
@@ -64,53 +64,25 @@ services:
       - monitor-net
     restart: always
 
-  # Push acceptor for ephemeral and batch jobs
-  pushgateway:
-    image: prom/pushgateway:v1.4.3
-    container_name: pushgateway
-    expose:
-      - 9091
-    networks:
-      - monitor-net
-    labels:
-      org.label-schema.group: "monitoring"
-    restart: always
-
   # Caddy reserve proxy and authen server
   caddy:
-    image: caddy:2.3.0
+    image: caddy:2.6.2
     container_name: caddy
     ports:
       - "3000:3000"
-      - "9090:9090"
-      - "8080:8080"
-      - "9091:9091"
       - "3100:3100"
-      # - "9093:9093"
+      - "8080:8080"
+      - "9090:9090"
+      - "9093:9093"
+      - "9091:9091"
     volumes:
       - ./caddy:/etc/caddy
     environment:
       - ADMIN_USER=${ADMIN_USER:-admin}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
       - ADMIN_PASSWORD_HASH=${ADMIN_PASSWORD_HASH:-JDJhJDE0JE91S1FrN0Z0VEsyWmhrQVpON1VzdHVLSDkyWHdsN0xNbEZYdnNIZm1pb2d1blg4Y09mL0ZP}
+    restart: unless-stopped
     networks:
       - monitor-net
     labels:
       org.label-schema.group: "monitoring"
-    restart: always
-
-  # alertmanager:
-  #   image: prom/alertmanager:v0.24.0
-  #   container_name: alertmanager
-  #   volumes:
-  #     - ./alertmanager:/etc/alertmanager
-  #   command:
-  #     - '--config.file=/etc/alertmanager/config.yml'
-  #     - '--storage.path=/alertmanager'
-  #   restart: always
-  #   expose:
-  #     - 9093
-  #   networks:
-  #     - monitor-net
-  #   labels:
-  #     org.label-schema.group: "monitoring"
